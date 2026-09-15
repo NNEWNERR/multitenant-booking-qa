@@ -2,3 +2,7 @@ node_modules/
 firebase-debug.log
 firestore-debug.log
 *.log
+.auth/
+playwright-report/
+test-results/
+dist/

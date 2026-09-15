@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Booking Desk</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <!-- Sign-in -->
+    <section id="login-view" class="view">
+      <h1>Booking Desk</h1>
+      <p class="muted">Demo accounts all use the password <code>demo1234</code></p>
+      <form id="login-form">
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" data-testid="email" autocomplete="username" required />
+
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" data-testid="password" autocomplete="current-password" required />
+
+        <!-- Starts disabled and is enabled by the module once the submit
+             handler is attached. Before that, a click would fall through to a
+             native form submit: the browser navigates, the page reloads, and
+             nothing appears to happen. -->
+        <button type="submit" data-testid="login-btn" disabled>Sign in</button>
+      </form>
+      <p id="login-error" class="error" data-testid="login-error" hidden></p>
+
+      <ul class="hints">
+        <li><code>admin@acme.test</code> — admin, Acme Air</li>
+        <li><code>staff@acme.test</code> — staff, Acme Air</li>
+        <li><code>cust@acme.test</code> — customer, Acme Air</li>
+        <li><code>staff@globex.test</code> — staff, Globex Cooling</li>
+      </ul>
+    </section>
+
+    <!-- Booking list -->
+    <header class="topbar" id="topbar" hidden>
+      <span data-testid="who"></span>
+      <button data-testid="logout-btn" type="button">Sign out</button>
+    </header>
+
+    <section id="list-view" hidden>
+      <!-- Only the list content fades. The dialog below deliberately sits
+           OUTSIDE the animated element: a running animation on opacity makes
+           its element a stacking context for as long as it runs, and a dialog
+           inside that element cannot paint above the sticky header outside it
+           — for those 200ms the back button is unreachable. -->
+      <div class="view">
+        <h2>Bookings</h2>
+        <p id="empty" class="muted" data-testid="empty" hidden>No bookings to show.</p>
+        <ul id="bookings" data-testid="booking-list"></ul>
+      </div>
+
+      <!-- Booking detail -->
+      <div id="modal" class="modal-backdrop" hidden data-testid="detail-modal">
+        <div class="modal-shell" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+          <button class="back" data-testid="modal-back" type="button" aria-label="Back to list">← Back</button>
+          <h3 id="modal-title" data-testid="modal-title"></h3>
+          <p>Status: <strong data-testid="modal-status"></strong></p>
+          <p class="muted" data-testid="modal-customer"></p>
+
+          <div class="actions">
+            <button data-testid="action-confirm" data-next="confirmed" type="button">Confirm</button>
+            <button data-testid="action-complete" data-next="completed" type="button">Complete</button>
+            <button data-testid="action-cancel" data-next="canceled" type="button">Cancel</button>
+          </div>
+
+          <p id="action-error" class="error" data-testid="action-error" hidden></p>
+        </div>
+      </div>
+    </section>
+
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>
