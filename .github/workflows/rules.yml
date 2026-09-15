@@ -1,0 +1,42 @@
+name: Security Rules Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  rules:
+    name: Firestore rules against the emulator
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      # The Firestore emulator is a Java program — without a JDK the whole
+      # suite cannot start, so this step is as essential as installing npm deps.
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: actions/setup-node@v7
+        with: { node-version: '22', cache: 'npm' }
+
+      - run: npm ci
+
+      # emulators:exec boots the emulator, runs the suite, and shuts it down —
+      # so a crashed run cannot leave a process holding the port, and nobody has
+      # to remember to start anything first.
+      - run: npm test
+
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: emulator-logs
+          path: |
+            firestore-debug.log
+            firebase-debug.log
+          retention-days: 7

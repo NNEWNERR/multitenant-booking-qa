@@ -1,0 +1,153 @@
+rules_version = '2';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Booking platform — multi-tenant security rules
+//
+// Several organisations share one database. Every document carries the id of
+// the tenant that owns it, and these rules are the last line that keeps one
+// tenant's data away from another's. They are written to be *tested*, not just
+// deployed: tests/ drives every branch below through the Firestore emulator.
+//
+// Identity comes from custom claims, not from a lookup:
+//   token.tenantId — which organisation the user belongs to
+//   token.role     — admin | staff | customer | platform_admin
+// ─────────────────────────────────────────────────────────────────────────────
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── identity helpers ────────────────────────────────────────────────────
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function myTenant() {
+      return request.auth.token.get('tenantId', '');
+    }
+
+    function role() {
+      return request.auth.token.get('role', '');
+    }
+
+    function isPlatformAdmin() {
+      return signedIn() && role() == 'platform_admin';
+    }
+
+    function isStaffOrAdmin() {
+      return role() == 'admin' || role() == 'staff';
+    }
+
+    // ── tenant ownership ────────────────────────────────────────────────────
+
+    // Reads the owning tenant off a document, accepting BOTH spellings.
+    //
+    // Documents created before the multi-tenant migration use snake_case
+    // (tenant_id); everything written since uses camelCase (tenantId). A rule
+    // that knows only one spelling sees '' for the other — and a document with
+    // no owner in the eyes of the rules is a document the rules will judge
+    // wrongly. Both spellings, one source of truth.
+    function docTenant(res) {
+      return res.data.get('tenantId', res.data.get('tenant_id', ''));
+    }
+
+    // `res` is null when the document does not exist. Reading .data off null
+    // raises an evaluation error, which denies the request — but for the wrong
+    // reason, and it hides the real one in the emulator log. Check first.
+    function sameTenant(res) {
+      return signedIn()
+        && myTenant() != ''
+        && res != null
+        && docTenant(res) == myTenant();
+    }
+
+    function incomingTenantMatches() {
+      return docTenant(request.resource) == myTenant();
+    }
+
+    // ── booking state machine ───────────────────────────────────────────────
+    //
+    // pending ──► confirmed ──► completed   (terminal)
+    //    │            │
+    //    └────────────┴───────► canceled    (terminal)
+    //
+    // Terminal states are terminal: a completed booking that can slide back to
+    // pending is how a slot ends up reserved by a job nobody is doing.
+    function nextStatus() {
+      return request.resource.data.get('status', '');
+    }
+
+    function currentStatus() {
+      return resource.data.get('status', '');
+    }
+
+    // The transition table itself — a state with no entry here has no way out,
+    // which is what makes 'completed' and 'canceled' terminal. Reading it as a
+    // table beats reading it as a chain of conditionals, and it is the same
+    // shape as the test that drives it.
+    function allowedNext(from) {
+      return {
+        'pending':   ['pending', 'confirmed', 'canceled'],
+        'confirmed': ['confirmed', 'completed', 'canceled']
+      }.get(from, []);
+    }
+
+    function validTransition() {
+      return allowedNext(currentStatus()).hasAny([nextStatus()]);
+    }
+
+    // ── bookings ────────────────────────────────────────────────────────────
+    match /bookings/{bookingId} {
+
+      // Customers see only their own; staff and admins see the whole tenant.
+      allow get, list: if isPlatformAdmin()
+        || (sameTenant(resource) && isStaffOrAdmin())
+        || (sameTenant(resource) && role() == 'customer'
+            && resource.data.get('customerId', '') == request.auth.uid);
+
+      // A booking may only be created inside the creator's own tenant, and
+      // only in the one state a new booking can legitimately be in.
+      allow create: if signedIn()
+        && incomingTenantMatches()
+        && nextStatus() == 'pending';
+
+      // Status moves follow the state machine; the owning tenant can never be
+      // rewritten, which would otherwise hand a document to another tenant.
+      allow update: if resource != null
+        && sameTenant(resource)
+        && isStaffOrAdmin()
+        && incomingTenantMatches()
+        && validTransition();
+
+      allow delete: if sameTenant(resource) && role() == 'admin';
+    }
+
+    // ── sites ───────────────────────────────────────────────────────────────
+    match /sites/{siteId} {
+      allow get, list: if isPlatformAdmin() || sameTenant(resource);
+      allow create, update: if sameTenant(resource)
+        && isStaffOrAdmin()
+        && incomingTenantMatches();
+      allow delete: if sameTenant(resource) && role() == 'admin';
+    }
+
+    // ── users ───────────────────────────────────────────────────────────────
+    match /users/{uid} {
+      allow get: if isPlatformAdmin()
+        || (signedIn() && request.auth.uid == uid)
+        || (sameTenant(resource) && isStaffOrAdmin());
+      allow list: if isPlatformAdmin() || (sameTenant(resource) && isStaffOrAdmin());
+      allow create, update, delete: if sameTenant(resource) && role() == 'admin';
+    }
+
+    // ── tenants ─────────────────────────────────────────────────────────────
+    match /tenants/{tenantId} {
+      allow get: if isPlatformAdmin() || (signedIn() && myTenant() == tenantId);
+      allow list, create, update, delete: if isPlatformAdmin();
+    }
+
+    // Anything not matched above is denied — new collections start closed.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

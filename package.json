@@ -1,0 +1,23 @@
+{
+  "name": "multitenant-booking-qa",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Security-rules test suite for a multi-tenant booking platform — runnable end to end against the Firestore emulator.",
+  "author": "Supakorn (NNEWNERR)",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "test": "firebase emulators:exec --only firestore --project=demo-booking-qa \"vitest run\"",
+    "test:watch": "firebase emulators:exec --only firestore --project=demo-booking-qa \"vitest\"",
+    "emulator": "firebase emulators:start --only firestore --project=demo-booking-qa",
+    "test:against-running-emulator": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.0",
+    "firebase": "^12.14.0",
+    "firebase-tools": "^15.0.0",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}
