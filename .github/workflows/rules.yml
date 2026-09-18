@@ -13,7 +13,7 @@ jobs:
   # saturated, and its auth calls occasionally stalled — a failure that said
   # nothing about the code.
   rules:
-    name: Security rules (52)
+    name: Security rules (76)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

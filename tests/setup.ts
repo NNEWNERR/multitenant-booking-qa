@@ -61,6 +61,23 @@ export function guest(env: RulesTestEnvironment): RulesTestContext {
 }
 
 /**
+ * The anonymous session an app opens so that `request.auth != null` holds for
+ * public pages. Signed in, but carrying no tenant.
+ */
+export function anonymous(env: RulesTestEnvironment, uid = 'anon-1'): RulesTestContext {
+  return env.authenticatedContext(uid, { firebase: { sign_in_provider: 'anonymous' } })
+}
+
+/**
+ * Signed in for real, but the tenant claim has not been minted yet — the window
+ * during sign-up, or between authenticating and choosing a tenant. Treated
+ * exactly like a signed-out visitor, which is what the tests here pin.
+ */
+export function claimless(env: RulesTestEnvironment, uid = 'pending-1'): RulesTestContext {
+  return env.authenticatedContext(uid, { firebase: { sign_in_provider: 'password' } })
+}
+
+/**
  * Writes seed data with the rules switched off.
  *
  * Seeding through the rules would mean a rules bug could block the setup of the

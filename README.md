@@ -2,9 +2,10 @@
 
 [![Tests](https://github.com/NNEWNERR/multitenant-booking-qa/actions/workflows/rules.yml/badge.svg)](https://github.com/NNEWNERR/multitenant-booking-qa/actions/workflows/rules.yml)
 
-**69 tests** across two layers of the same system: **52** security-rules tests that
-prove one tenant cannot reach another's data, and **17** Playwright tests that
-drive the screen a user actually meets. Both run against the Firebase emulator —
+**93 tests** across two layers of the same system: **76** security-rules tests that
+prove one tenant cannot reach another's data — and that a visitor with no tenant
+reaches almost none of it — plus **17** Playwright tests that drive the screen a
+user actually meets. Both run against the Firebase emulator —
 no mocks, no cloud project, no credentials.
 
 ```bash
@@ -18,7 +19,7 @@ emulator is a Java program.
 
 | | |
 | --- | --- |
-| `npm run test:rules` | 52 rules tests (Vitest + `@firebase/rules-unit-testing`) |
+| `npm run test:rules` | 76 rules tests (Vitest + `@firebase/rules-unit-testing`) |
 | `npm run test:ui` | 17 UI tests (Playwright, desktop + Pixel 7) |
 | `npm run app` | the app on its own, against the emulator |
 | `npm run test:ui:headed` | watch the UI run in a browser |
@@ -52,12 +53,12 @@ token.role       admin | staff | customer | platform_admin
 ```
 app/                a Booking Desk: sign in, list, detail dialog, actions
 firestore.rules     the rules both layers are written against
-tests/*.test.ts     52 rules tests
+tests/*.test.ts     76 rules tests
 tests/ui/*.spec.ts  17 UI tests
 scripts/seed.ts     users with claims + bookings, via the emulator REST API
 ```
 
-## Layer 1 — security rules (52 tests)
+## Layer 1 — security rules (76 tests)
 
 | Suite | Tests | What it proves |
 | --- | --- | --- |
@@ -65,6 +66,13 @@ scripts/seed.ts     users with claims + bookings, via the emulator REST API
 | `role-permissions` | 13 | A decision table, one test per cell. An unrecognised role gets nothing |
 | `booking-state` | 16 | Every allowed transition, and every forbidden one, against a table the rules hold in the same shape |
 | `legacy-field-compat` | 9 | Documents written before the migration (`tenant_id`) stay reachable by their owner without becoming a hole for anyone else |
+| `public-boundary` | 24 | What a visitor with **no tenant** may touch: the service catalogue a booking form needs, and nothing else. Each case runs for all three shapes of a tenant-less session — signed out, anonymous, and signed in before a tenant is assigned |
+
+**"No tenant" is the boundary, not "signed out".** Rules written as
+`request.auth == null` hand a live session more than a signed-out one — and a
+live session is the easy part to obtain, because sign-up flows give them away.
+The catalogue is readable by anyone; bookings carry a customer's name, phone and
+address, so they are readable by the tenant that owns them and by no one else.
 
 **The deny cases are the point.** A suite made only of success cases cannot prove
 data does not leak — rules that deny everything would pass it perfectly. So most

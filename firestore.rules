@@ -121,6 +121,28 @@ service cloud.firestore {
       allow delete: if sameTenant(resource) && role() == 'admin';
     }
 
+    // ── the public boundary ─────────────────────────────────────────────────
+    //
+    // A visitor on the booking page has no tenant: signed out, or holding a
+    // session the app opened for them (anonymous, or signed in but before a
+    // tenant is picked). They need the service catalogue to render a booking
+    // form — and nothing else.
+    //
+    // Spelled as "no tenantId claim" rather than "not signed in", because the
+    // two must be treated the same. A session that carries no tenant cannot be
+    // trusted with tenant data, whichever way it was created.
+    function isPublicReader() {
+      return !signedIn() || myTenant() == '';
+    }
+
+    // ── catalog (public, per tenant) ────────────────────────────────────────
+    match /catalog/{itemId} {
+      allow get, list: if isPublicReader() || isPlatformAdmin() || sameTenant(resource);
+      allow create, update, delete: if sameTenant(resource)
+        && isStaffOrAdmin()
+        && incomingTenantMatches();
+    }
+
     // ── sites ───────────────────────────────────────────────────────────────
     match /sites/{siteId} {
       allow get, list: if isPlatformAdmin() || sameTenant(resource);
