@@ -9,6 +9,12 @@
 //
 // usage: node publish-test-stats.mjs --suite <id> --repo <name> --label <text>
 //                                    --kind playwright|vitest --file <report.json>
+//                                    [--inventory <list.json>]
+//
+// --inventory takes the json output of `playwright test --list` and records
+// how many tests the repo *defines* — including ones CI filters out (e.g.
+// win32-only @visual). The site's headline sums this; the per-repo line shows
+// what CI actually ran. Without it, inventory = tests run.
 // env:   FIRESTORE_TOKEN (required), GITHUB_SHA / GITHUB_SERVER_URL /
 //        GITHUB_REPOSITORY / GITHUB_RUN_ID (set by Actions)
 
@@ -47,6 +53,18 @@ const c = count(args.kind, report)
 const total = c.passed + c.failed + c.flaky + c.skipped
 if (total === 0) throw new Error(`${args.file} reports 0 tests — refusing to publish an empty run`)
 
+function listed(file) {
+  let n = 0
+  const walk = (suite) => {
+    for (const spec of suite.specs ?? []) n += spec.tests.length
+    for (const child of suite.suites ?? []) walk(child)
+  }
+  JSON.parse(readFileSync(file, 'utf8')).suites.forEach(walk)
+  return n
+}
+const inventory = args.inventory ? listed(args.inventory) : total
+if (inventory < total) throw new Error(`inventory ${inventory} < tests run ${total} — wrong --inventory file?`)
+
 const env = process.env
 const runUrl = env.GITHUB_RUN_ID
   ? `${env.GITHUB_SERVER_URL}/${env.GITHUB_REPOSITORY}/actions/runs/${env.GITHUB_RUN_ID}`
@@ -58,6 +76,7 @@ const fields = {
   repo: str(args.repo),
   label: str(args.label),
   total: int(total),
+  inventory: int(inventory),
   passed: int(c.passed),
   failed: int(c.failed),
   flaky: int(c.flaky),
@@ -76,4 +95,4 @@ const res = await fetch(url, {
   body: JSON.stringify({ fields }),
 })
 if (!res.ok) throw new Error(`Firestore ${res.status}: ${await res.text()}`)
-console.log(`published suites/${args.suite}: ${total} tests — ${c.passed} passed, ${c.failed} failed, ${c.flaky} flaky, ${c.skipped} skipped`)
+console.log(`published suites/${args.suite}: ${total} tests run (${inventory} defined) — ${c.passed} passed, ${c.failed} failed, ${c.flaky} flaky, ${c.skipped} skipped`)
