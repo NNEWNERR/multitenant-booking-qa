@@ -8,5 +8,8 @@ export default defineConfig({
     fileParallelism: false,
     testTimeout: 30_000,
     hookTimeout: 30_000,
+    // On CI the json report feeds the portfolio site (scripts/publish-test-stats.mjs).
+    reporters: process.env.CI ? ['default', 'json'] : ['default'],
+    outputFile: { json: 'vitest-results.json' },
   },
 })
