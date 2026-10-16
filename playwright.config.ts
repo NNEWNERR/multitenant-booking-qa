@@ -18,7 +18,10 @@ export default defineConfig({
   // "slow" into "failed". Slow is not broken — and the fix for a slow
   // dependency is an honest timeout, not a retry that hides it.
   expect: { timeout: 20_000 },
-  reporter: isCI ? [['github'], ['html', { open: 'never' }]] : [['list'], ['html', { open: 'never' }]],
+  // On CI the json report feeds the portfolio site (scripts/publish-test-stats.mjs).
+  reporter: isCI
+    ? [['github'], ['html', { open: 'never' }], ['json', { outputFile: 'results.json' }]]
+    : [['list'], ['html', { open: 'never' }]],
 
   // Seeds users and bookings into the emulator before anything runs. The tests
   // therefore start from a known state instead of whatever the last run left.
