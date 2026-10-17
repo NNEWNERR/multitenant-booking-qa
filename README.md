@@ -34,8 +34,9 @@ tests at both layers — so the tests can do things a suite pointed at a public
 demo never can: seed a tenant, seed a document in a *legacy* shape, sign in as
 four different roles, and assert on what each of them is refused.
 
-It is a clean-room rebuild of problems I worked through on a production booking
-platform: same shapes, generic domain, none of the client's code or data.
+It is a clean-room rebuild of problems I worked through on the production booking
+platform of my own air-con service business: same shapes, generic domain, none
+of that system's code or customer data.
 [The case studies](https://github.com/NNEWNERR/new.supakorn/tree/main/case-studies)
 tell those stories; this repo is where the patterns are runnable.
 
