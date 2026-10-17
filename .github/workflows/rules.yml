@@ -18,7 +18,6 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
-      id-token: write   # OIDC token for the Firestore stats step
     steps:
       - uses: actions/checkout@v7
       # The Firestore emulator is a Java program; without a JDK nothing runs.
@@ -36,25 +35,14 @@ jobs:
             firestore-debug.log
             firebase-debug.log
           retention-days: 7
-      - name: Authenticate to portfolio Firestore
-        # Keyless: GitHub OIDC -> Workload Identity Federation. Only pushes to
-        # main in NNEWNERR repos can mint this token.
+      - name: Keep totals for the stats job
         if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
-        id: gcp
-        uses: google-github-actions/auth@v3
+        uses: actions/upload-artifact@v7
         with:
-          workload_identity_provider: projects/932862873750/locations/global/workloadIdentityPools/github/providers/github-oidc
-          service_account: ci-stats-writer@supakorn-portfolio.iam.gserviceaccount.com
-          token_format: access_token
-          create_credentials_file: false
-      - name: Publish test stats to nnewnerr.github.io
-        # Runs on red builds too — the portfolio shows the latest result, not
-        # the latest green one. Never fails the build on its own.
-        if: always() && steps.gcp.outcome == 'success'
-        continue-on-error: true
-        env:
-          FIRESTORE_TOKEN: ${{ steps.gcp.outputs.access_token }}
-        run: node scripts/publish-test-stats.mjs --suite mtb-rules --repo multitenant-booking-qa --label "Firestore rules · Vitest" --kind vitest --file vitest-results.json
+          name: stats-rules
+          path: vitest-results.json
+          if-no-files-found: ignore
+          retention-days: 1
 
   ui:
     name: UI (17)
@@ -62,7 +50,6 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
-      id-token: write   # OIDC token for the Firestore stats step
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-java@v5
@@ -81,10 +68,39 @@ jobs:
           name: playwright-report
           path: playwright-report/
           retention-days: 7
+      - name: Keep totals for the stats job
+        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v7
+        with:
+          name: stats-ui
+          path: results.json
+          if-no-files-found: ignore
+          retention-days: 1
+
+  # The only job that can mint the stats token. It never runs `npm ci` or any
+  # repo code besides the dependency-free publish script, so a compromised
+  # package elsewhere in the pipeline cannot request the OIDC token.
+  publish-stats:
+    name: Publish test stats
+    needs: [rules, ui]
+    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    permissions:
+      contents: read
+      id-token: write   # OIDC token for Workload Identity Federation
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: scripts/publish-test-stats.mjs
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-node@v7
+        with: { node-version: '22' }
+      - uses: actions/download-artifact@v8
+        with: { pattern: stats-*, path: stats }
       - name: Authenticate to portfolio Firestore
         # Keyless: GitHub OIDC -> Workload Identity Federation. Only pushes to
         # main in NNEWNERR repos can mint this token.
-        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
         id: gcp
         uses: google-github-actions/auth@v3
         with:
@@ -92,11 +108,16 @@ jobs:
           service_account: ci-stats-writer@supakorn-portfolio.iam.gserviceaccount.com
           token_format: access_token
           create_credentials_file: false
-      - name: Publish test stats to nnewnerr.github.io
-        # Runs on red builds too — the portfolio shows the latest result, not
-        # the latest green one. Never fails the build on its own.
-        if: always() && steps.gcp.outcome == 'success'
-        continue-on-error: true
+      # Runs on red builds too — the portfolio shows the latest result, not the
+      # latest green one. Each suite publishes on its own, so one missing report
+      # doesn't hide the other.
+      - name: Publish rules stats
+        if: always() && steps.gcp.outcome == 'success' && hashFiles('stats/stats-rules/vitest-results.json') != ''
         env:
           FIRESTORE_TOKEN: ${{ steps.gcp.outputs.access_token }}
-        run: node scripts/publish-test-stats.mjs --suite mtb-ui --repo multitenant-booking-qa --label "UI · Playwright" --kind playwright --file results.json
+        run: node scripts/publish-test-stats.mjs --suite mtb-rules --repo multitenant-booking-qa --label "Firestore rules · Vitest" --kind vitest --file stats/stats-rules/vitest-results.json
+      - name: Publish UI stats
+        if: always() && steps.gcp.outcome == 'success' && hashFiles('stats/stats-ui/results.json') != ''
+        env:
+          FIRESTORE_TOKEN: ${{ steps.gcp.outputs.access_token }}
+        run: node scripts/publish-test-stats.mjs --suite mtb-ui --repo multitenant-booking-qa --label "UI · Playwright" --kind playwright --file stats/stats-ui/results.json
